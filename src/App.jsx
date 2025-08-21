@@ -20,6 +20,7 @@ function App() {
     nombreConductor: "",
   });
   const [archivo, setArchivo] = useState(null);
+  const [archivoEPS, setArchivoEPS] = useState(null);
   const [resultado, setResultado] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -56,6 +57,10 @@ function App() {
         formData.append(key, value);
       }
       formData.append("documento", archivo);
+
+      if (archivoEPS) {
+        formData.append("certificadoEPS", archivoEPS);
+      }
 
       const res = await axios.post("http://localhost:5000/validar", formData);
 
@@ -98,14 +103,14 @@ function App() {
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-full mb-4">
-            <FileText className="w-8 h-8 text-white" />
+          <div className="inline-flex items-center justify-center w-50 h-16">
+            <img src="/public/images/Cemex_logo_2023.png" alt="logo" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Sistema de Validación de Cédula
+            Sistema de Validación de Documentos
           </h1>
           <p className="text-gray-600">
-            Valida documentos de identidad de conductores de forma automática
+            Valida documentos de conductores de forma automática
           </p>
         </div>
 
@@ -212,6 +217,35 @@ function App() {
                 </div>
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Certificado EPS *
+                </label>
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      setArchivoEPS(e.target.files[0]);
+                      setError("");
+                    }}
+                    className="hidden"
+                    id="eps-upload"
+                  />
+                  <label htmlFor="eps-upload" className="cursor-pointer">
+                    <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    <p className="text-sm text-gray-600">
+                      {archivoEPS
+                        ? archivoEPS.name
+                        : "Haz clic para subir certificado EPS"}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      PNG, JPG hasta 10MB
+                    </p>
+                  </label>
+                </div>
+              </div>
+
               {error && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                   <p className="text-red-700 text-sm">{error}</p>
@@ -253,12 +287,15 @@ function App() {
               </div>
             ) : (
               <div className="space-y-4">
+                <h3 className="text-lg font-medium text-gray-800 mb-2">
+                      Cedula
+                    </h3>
                 <StatusIcon
                   isValid={resultado.coincidencias.cedula}
                   label={`Cédula ${
                     resultado.coincidencias.cedula
                       ? "encontrada"
-                      : "no encontrada"
+                      : "no coincide"
                   }`}
                 />
 
@@ -267,7 +304,7 @@ function App() {
                   label={`Nombre ${
                     resultado.coincidencias.nombre
                       ? "encontrado"
-                      : "no encontrado"
+                      : "no coincide"
                   }`}
                 />
 
@@ -275,6 +312,76 @@ function App() {
                   isValid={resultado.edadValida}
                   label={`Edad ${resultado.edadValida ? "válida" : "inválida"}`}
                 />
+
+                {resultado.documentoEPS && (
+                  <div className="mt-6">
+                    <h3 className="text-lg font-medium text-gray-800 mb-2">
+                      Certificado EPS
+                    </h3>
+                    <StatusIcon
+                      isValid={resultado.documentoEPS.nombreEncontrado}
+                      label="Nombre encontrado en EPS"
+                    />
+                    <StatusIcon
+                      isValid={resultado.documentoEPS.cedulaEncontrada}
+                      label="Cédula encontrada en EPS"
+                    />
+                    <StatusIcon
+                      isValid={resultado.documentoEPS.fechaValida}
+                      label={
+                        resultado.documentoEPS.fechaValida
+                          ? "Fecha válida (menos de 30 días)"
+                          : "Documento vencido (más de 30 días)"
+                      }
+                    />
+                    <div className="space-y-2 mt-2">
+                      {Object.entries(resultado.documentoEPS.palabrasClave).map(
+                        ([clave, valor]) => (
+                          <StatusIcon
+                            key={clave}
+                            isValid={valor}
+                            label={`Contiene "${clave}"`}
+                          />
+                        )
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {resultado.documentoEPS && (
+                  <div className="mt-6">
+                    <h3 className="text-lg font-medium text-gray-800 mb-2">
+                      Certificado EPS
+                    </h3>
+                    <StatusIcon
+                      isValid={resultado.documentoEPS.nombreEncontrado}
+                      label="Nombre encontrado en EPS"
+                    />
+                    <StatusIcon
+                      isValid={resultado.documentoEPS.cedulaEncontrada}
+                      label="Cédula encontrada en EPS"
+                    />
+                    <StatusIcon
+                      isValid={resultado.documentoEPS.fechaValida}
+                      label={
+                        resultado.documentoEPS.fechaValida
+                          ? "Fecha válida (menos de 30 días)"
+                          : "Documento vencido (más de 30 días)"
+                      }
+                    />
+                    <div className="space-y-2 mt-2">
+                      {Object.entries(resultado.documentoEPS.palabrasClave).map(
+                        ([clave, valor]) => (
+                          <StatusIcon
+                            key={clave}
+                            isValid={valor}
+                            label={`Contiene "${clave}"`}
+                          />
+                        )
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {resultado.texto && (
                   <div className="mt-6">

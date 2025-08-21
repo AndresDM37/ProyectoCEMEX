@@ -13,104 +13,194 @@ app.use(json());
 const storage = memoryStorage();
 const upload = multer({ storage });
 
-app.post("/validar", upload.single("documento"), async (req, res) => {
-  console.log("📩 Recibí solicitud POST /validar");
-  console.log("📄 Archivo recibido:", req.file);
-  console.log("📝 Datos del formulario:", req.body);
+app.post(
+  "/validar",
+  upload.fields([
+    { name: "documento", maxCount: 1 }, // Cédula
+    { name: "certificadoEPS", maxCount: 1 }, // EPS
+    { name: "certificadoARL", maxCount: 1 }, // ARL
+  ]),
+  async (req, res) => {
+    console.log("📩 Recibí solicitud POST /validar");
+    console.log("📄 Archivos recibidos:", req.files);
+    console.log("📝 Datos del formulario:", req.body);
 
-  const { sap, nombreTransportador, cedula, nombreConductor } = req.body;
-  const fileBuffer = req.file.buffer;
+    const { cedula, nombreConductor } = req.body;
 
-  if (!fileBuffer) {
-    console.log("⛔ No se recibió ningún archivo");
-    return res.status(400).json({ error: "No se recibió ningún documento" });
-  }
+    try {
+      // ================================
+      // 1. PROCESAR CÉDULA
+      // ================================
+      const fileBufferCedula = req.files.documento[0].buffer;
+      const resultCedula = await Tesseract.recognize(fileBufferCedula, "spa");
+      const textoCedula = resultCedula.data.text;
 
-  try {
-    const result = await Tesseract.recognize(fileBuffer, "spa", {
-      logger: (m) => console.log(m),
-    });
+      // --- Validación cédula
+      const cedulaLimpia = cedula.replace(/\D/g, "");
+      const posiblesCedulasRaw =
+        textoCedula.match(/\d{2,3}\.?\d{3}\.?\d{3}[^0-9]*/g) || [];
+      const posiblesCedulas = posiblesCedulasRaw.map((c) =>
+        c.replace(/\D/g, "")
+      );
+      const cedulaEncontrada = posiblesCedulas.includes(cedulaLimpia);
 
-    const textoOriginal = result.data.text;
-    const textoNormalizado = textoOriginal.toLowerCase();
+      // Nombre en cédula
+      const nombreEsperado = nombreConductor
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+      const textoPlanoCedula = textoCedula
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+      const lineasCedula = textoPlanoCedula.split(/\n/).filter(Boolean);
+      let similitudCedula = 0;
+      if (lineasCedula.length > 0) {
+        similitudCedula = stringSimilarity.findBestMatch(
+          nombreEsperado,
+          lineasCedula
+        ).bestMatch.rating;
+      }
+      const nombreEncontradoCedula = similitudCedula > 0.5;
 
-    // Validar cédula
-    const cedulaLimpia = cedula.replace(/\D/g, "");
-    const textoSinEspacios = textoNormalizado.replace(/\s/g, "");
+      // ================================
+      // 2. PROCESAR CERTIFICADO EPS
+      // ================================
+      let resultadoEPS = null;
 
-    const posiblesCedulasRaw =
-      textoOriginal.match(/\d{2,3}\.?\d{3}\.?\d{3}[^0-9]*/g) || [];
+      if (req.files.certificadoEPS) {
+        const fileBufferEPS = req.files.certificadoEPS[0].buffer;
+        const resultEPS = await Tesseract.recognize(fileBufferEPS, "spa");
+        const textoEPS = resultEPS.data.text;
 
-    const posiblesCedulas = posiblesCedulasRaw.map(
-      (c) => c.replace(/\D/g, "") // Quitar todo lo que no sea número
-    );
+        // --- Validar nombre
+        const textoPlanoEPS = textoEPS
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "");
+        const lineasEPS = textoPlanoEPS.split(/\n/).filter(Boolean);
+        let similitudEPS = 0;
+        if (lineasEPS.length > 0) {
+          similitudEPS = stringSimilarity.findBestMatch(
+            nombreEsperado,
+            lineasEPS
+          ).bestMatch.rating;
+        }
+        const nombreEncontradoEPS = similitudEPS > 0.5;
 
-    console.log("🔍 CÉDULAS DETECTADAS OCR:", posiblesCedulasRaw);
-    console.log("🔍 CÉDULAS NORMALIZADAS OCR:", posiblesCedulas);
+        // --- Validar cédula
+        const posiblesCedulasEPSRaw =
+          textoEPS.match(/\d{2,3}\.?\d{3}\.?\d{3}[^0-9]*/g) || [];
+        const posiblesCedulasEPS = posiblesCedulasEPSRaw.map((c) =>
+          c.replace(/\D/g, "")
+        );
+        const cedulaEncontradaEPS = posiblesCedulasEPS.includes(cedulaLimpia);
 
-    const cedulaEncontrada = posiblesCedulas.includes(cedulaLimpia);
+        // --- Validar fecha expedición (dd/mm/yyyy o dd-mm-yyyy)
+        const regexFecha = /(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})/g;
+        const fechasEncontradas = textoEPS.match(regexFecha) || [];
+        let fechaValida = false;
+        let fechaDetectada = null;
 
-    console.log("🔍 TEXTO OCR COMPLETO:\n", textoOriginal);
-    console.log("🔍 CÉDULA LIMPIA (INPUT):", cedulaLimpia);
-    console.log("🔍 CÉDULAS DETECTADAS OCR:", posiblesCedulasRaw);
-    console.log("🔍 CÉDULAS NORMALIZADAS OCR:", posiblesCedulas);
-    console.log("✅ ¿CÉDULA ENCONTRADA?:", cedulaEncontrada);
+        if (fechasEncontradas.length > 0) {
+          fechaDetectada = fechasEncontradas[0]; // tomar primera
+          let partes = fechaDetectada.includes("/")
+            ? fechaDetectada.split("/")
+            : fechaDetectada.split("-");
 
-    // Validar nombre del conductor
-    const nombreEsperado = nombreConductor
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "");
+          // Normalizar año (puede venir en 2 dígitos)
+          let dia = parseInt(partes[0]);
+          let mes = parseInt(partes[1]) - 1;
+          let anio = parseInt(
+            partes[2].length === 2 ? "20" + partes[2] : partes[2]
+          );
 
-    const textoPlano = textoOriginal
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "");
+          const fechaDoc = new Date(anio, mes, dia);
+          const hoy = new Date();
+          const diffDias = Math.floor((hoy - fechaDoc) / (1000 * 60 * 60 * 24));
+          fechaValida = diffDias <= 30;
+        }
 
-    const lineas = textoPlano.split(/\n/).filter(Boolean);
-    const similitud = stringSimilarity.findBestMatch(nombreEsperado, lineas)
-      .bestMatch.rating;
-    const nombreEncontrado = similitud > 0.5;
+        // --- Palabras clave
+        const contieneAfiliado = textoPlanoEPS.includes("afiliado");
+        const contieneVinculado = textoPlanoEPS.includes("vinculado");
+        const contieneHabilitado = textoPlanoEPS.includes("habilitado");
+        const contieneActivo = textoPlanoEPS.includes("activo");
+        const contieneVigente = textoPlanoEPS.includes("vigente");
 
-    // Extraer fecha de nacimiento y calcular edad
-    const regexFecha = /(\d{2}\/\d{2}\/\d{4})/g;
-    const fechas = textoNormalizado.match(regexFecha);
-    let edadValida = false;
-    let edad = "No detectada";
-
-    if (fechas && fechas.length > 0) {
-      const [dia, mes, anio] = fechas[0].split("/");
-      const fechaNacimiento = new Date(`${anio}-${mes}-${dia}`);
-      const hoy = new Date();
-
-      let calculoEdad = hoy.getFullYear() - fechaNacimiento.getFullYear();
-      const mesDiferencia = hoy.getMonth() - fechaNacimiento.getMonth();
-
-      if (
-        mesDiferencia < 0 ||
-        (mesDiferencia === 0 && hoy.getDate() < fechaNacimiento.getDate())
-      ) {
-        calculoEdad--;
+        resultadoEPS = {
+          nombreEncontrado: nombreEncontradoEPS,
+          cedulaEncontrada: cedulaEncontradaEPS,
+          fechaDetectada,
+          fechaValida,
+          palabrasClave: {
+            afiliado: contieneAfiliado,
+            vinculado: contieneVinculado,
+            habilitado: contieneHabilitado,
+            activo: contieneActivo,
+            vigente: contieneVigente,
+          },
+          texto: textoEPS,
+        };
       }
 
-      edad = calculoEdad;
-      edadValida = calculoEdad >= 26 && calculoEdad <= 65;
-    }
+      // ================================
+      // 3. PROCESAR CERTIFICADO ARL
+      // ================================
 
-    res.json({
-      texto: textoOriginal,
-      coincidencias: {
-        cedula: cedulaEncontrada,
-        nombre: nombreEncontrado,
-      },
-      edadDetectada: edad,
-      edadValida,
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Error al procesar el documento." });
+      const textoPlanoARL = dataARL.text.toUpperCase();
+      const lineasARL = textoPlanoARL
+        .split(/\n/)
+        .map((l) => l.trim())
+        .filter(Boolean);
+
+      // --- Validación del nombre (igual que EPS)
+      let similitudARL = 0;
+      if (lineasARL.length > 0) {
+        similitudARL = stringSimilarity.findBestMatch(nombreEsperado, lineasARL)
+          .bestMatch.rating;
+      }
+      const nombreEncontradoARL = similitudARL > 0.5;
+
+      // --- Validación de la CLASE DE RIESGO
+      let cumpleRiesgo = false;
+      let riesgoEncontrado = null;
+
+      for (const linea of lineasARL) {
+        if (linea.includes("CLASE DE RIESGO") || linea.startsWith("CLASE")) {
+          const match = linea.match(/\d+/); // Buscar el número en la línea
+          if (match) {
+            riesgoEncontrado = parseInt(match[0], 10);
+            cumpleRiesgo = riesgoEncontrado >= 4;
+          }
+          break; // salir del loop porque ya lo encontramos
+        }
+      }
+
+      // --- Resultado ARL
+      const resultadoARL = {
+        nombreEncontrado: nombreEncontradoARL,
+        riesgoEncontrado,
+        cumpleRiesgo,
+      };
+
+      // ================================
+      // RESPUESTA
+      // ================================
+      res.json({
+        coincidencias: {
+          cedula: cedulaEncontrada,
+          nombre: nombreEncontradoCedula,
+        },
+        documentoEPS: resultadoEPS,
+        textoCedula,
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Error al procesar el documento." });
+    }
   }
-});
+);
 
 app.listen(port, () =>
   console.log(`🧠 Servidor OCR activo en http://localhost:${port}`)

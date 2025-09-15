@@ -1,8 +1,13 @@
 import express, { json } from "express";
 import multer, { memoryStorage } from "multer";
 import cors from "cors";
-import Tesseract from "tesseract.js";
-import stringSimilarity from "string-similarity";
+import { validarFormatoTransportador } from "./validators/formatoValidator.js";
+import { validarCedula } from "./validators/cedulaValidator.js";
+// import { validarLicencia } from "./validators/licenciaValidator.js";
+import { validarEPS } from "./validators/epsValidator.js";
+import { validarARL } from "./validators/arlValidator.js";
+import { validarPension  } from "./validators/pensionValidator.js";
+// import connection from "../database/snowflake.js"; 
 
 const app = express();
 const port = 5000;
@@ -13,187 +18,154 @@ app.use(json());
 const storage = memoryStorage();
 const upload = multer({ storage });
 
+// function ejecutarQuery(connection, sqlText, binds) {
+//   return new Promise((resolve, reject) => {
+//     connection.execute({
+//       sqlText,
+//       binds,
+//       complete: (err, stmt, rows) => {
+//         if (err) {
+//           console.error("❌ Error en query:", err.message);
+//           reject(err);
+//         } else {
+//           console.log("✅ Query ejecutado, filas:", rows.length);
+//           resolve(rows);
+//         }
+//       },
+//     });
+//   });
+// }
+
 app.post(
   "/validar",
   upload.fields([
+    { name: "formatoCreacion", maxCount: 1 }, // Formato de creación
+    { name: "licenciaConduccion", maxCount: 1 }, // Licencia de conducción
     { name: "documento", maxCount: 1 }, // Cédula
     { name: "certificadoEPS", maxCount: 1 }, // EPS
     { name: "certificadoARL", maxCount: 1 }, // ARL
+    { name: "certificadoPension", maxCount: 1 }, // PENSION
   ]),
   async (req, res) => {
     console.log("📩 Recibí solicitud POST /validar");
     console.log("📄 Archivos recibidos:", req.files);
     console.log("📝 Datos del formulario:", req.body);
 
-    const { cedula, nombreConductor } = req.body;
+    const { codigoTransportador, nombreTransportador, cedula, nombreConductor } = req.body;
+    let validacionBD = null;
+
+      // ================================
+      // 1. CONSULTA EN SNOWFLAKE
+      // ================================
 
     try {
-      // ================================
-      // 1. PROCESAR CÉDULA
-      // ================================
-      const fileBufferCedula = req.files.documento[0].buffer;
-      const resultCedula = await Tesseract.recognize(fileBufferCedula, "spa");
-      const textoCedula = resultCedula.data.text;
+    // const query = `
+    //    SELECT STCD1 AS CEDULA
+    //   FROM PRD_LND_MRP_SAP.MRP500.KNA1
+    //   WHERE STCD1 = ?
+    // `;
 
-      // --- Validación cédula
-      const cedulaLimpia = cedula.replace(/\D/g, "");
-      const posiblesCedulasRaw =
-        textoCedula.match(/\d{2,3}\.?\d{3}\.?\d{3}[^0-9]*/g) || [];
-      const posiblesCedulas = posiblesCedulasRaw.map((c) =>
-        c.replace(/\D/g, "")
-      );
-      const cedulaEncontrada = posiblesCedulas.includes(cedulaLimpia);
+    // const rows = await ejecutarQuery(connection, query, [cedula]);
 
-      // Nombre en cédula
-      const nombreEsperado = nombreConductor
-        .toLowerCase()
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "");
-      const textoPlanoCedula = textoCedula
-        .toLowerCase()
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "");
-      const lineasCedula = textoPlanoCedula.split(/\n/).filter(Boolean);
-      let similitudCedula = 0;
-      if (lineasCedula.length > 0) {
-        similitudCedula = stringSimilarity.findBestMatch(
-          nombreEsperado,
-          lineasCedula
-        ).bestMatch.rating;
-      }
-      const nombreEncontradoCedula = similitudCedula > 0.5;
+    // if (rows.length > 0) {
+    //   res.json({
+    //     existe: true,
+    //     mensaje: `✅ La cédula ${cedula} existe en SAP`,
+    //     datos: rows[0],
+    //   });
+    // } else {
+    //   res.json({
+    //     existe: false,
+    //     mensaje: `⚠️ La cédula ${cedula} no existe en SAP`,
+    //   });
+    // }
 
       // ================================
-      // 2. PROCESAR CERTIFICADO EPS
+      // 1. PROCESAR FORMATO
+      // ===============================
+
+      const resultadoFormato = await validarFormatoTransportador(
+        req.files.formatoCreacion[0].buffer,
+        codigoTransportador,
+        nombreTransportador,
+        cedula,
+        nombreConductor
+    );
+
       // ================================
+      // 2. PROCESAR CÉDULA
+      // ===============================
+    const resultadoCedula = await validarCedula(
+      req.files.documento[0].buffer,
+      cedula,
+      nombreConductor
+    );
+
+
+    
+      // ================================
+      // 3. PROCESAR LICENCIA DE CONDUCCIÓN
+      // ===============================
+
+      // const resultadoLicencia = await validarLicencia(
+      //   req.files.licenciaConduccion[0].buffer,
+      //   cedulaLimpia,
+      //   nombreEsperado
+      // );
+
+      // ================================
+      // 4. PROCESAR CERTIFICADO EPS
+      // ================================
+
       let resultadoEPS = null;
-
       if (req.files.certificadoEPS) {
-        const fileBufferEPS = req.files.certificadoEPS[0].buffer;
-        const resultEPS = await Tesseract.recognize(fileBufferEPS, "spa");
-        const textoEPS = resultEPS.data.text;
-
-        // --- Validar nombre
-        const textoPlanoEPS = textoEPS
-          .toLowerCase()
-          .normalize("NFD")
-          .replace(/[\u0300-\u036f]/g, "");
-        const lineasEPS = textoPlanoEPS.split(/\n/).filter(Boolean);
-        let similitudEPS = 0;
-        if (lineasEPS.length > 0) {
-          similitudEPS = stringSimilarity.findBestMatch(
-            nombreEsperado,
-            lineasEPS
-          ).bestMatch.rating;
-        }
-        const nombreEncontradoEPS = similitudEPS > 0.5;
-
-        // --- Validar cédula
-        const posiblesCedulasEPSRaw =
-          textoEPS.match(/\d{2,3}\.?\d{3}\.?\d{3}[^0-9]*/g) || [];
-        const posiblesCedulasEPS = posiblesCedulasEPSRaw.map((c) =>
-          c.replace(/\D/g, "")
+        resultadoEPS = await validarEPS(
+          req.files.certificadoEPS[0].buffer,
+          nombreConductor,
+          cedula
         );
-        const cedulaEncontradaEPS = posiblesCedulasEPS.includes(cedulaLimpia);
-
-        // --- Validar fecha expedición (dd/mm/yyyy o dd-mm-yyyy)
-        const regexFecha = /(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})/g;
-        const fechasEncontradas = textoEPS.match(regexFecha) || [];
-        let fechaValida = false;
-        let fechaDetectada = null;
-
-        if (fechasEncontradas.length > 0) {
-          fechaDetectada = fechasEncontradas[0]; // tomar primera
-          let partes = fechaDetectada.includes("/")
-            ? fechaDetectada.split("/")
-            : fechaDetectada.split("-");
-
-          // Normalizar año (puede venir en 2 dígitos)
-          let dia = parseInt(partes[0]);
-          let mes = parseInt(partes[1]) - 1;
-          let anio = parseInt(
-            partes[2].length === 2 ? "20" + partes[2] : partes[2]
-          );
-
-          const fechaDoc = new Date(anio, mes, dia);
-          const hoy = new Date();
-          const diffDias = Math.floor((hoy - fechaDoc) / (1000 * 60 * 60 * 24));
-          fechaValida = diffDias <= 30;
-        }
-
-        // --- Palabras clave
-        const contieneAfiliado = textoPlanoEPS.includes("afiliado");
-        const contieneVinculado = textoPlanoEPS.includes("vinculado");
-        const contieneHabilitado = textoPlanoEPS.includes("habilitado");
-        const contieneActivo = textoPlanoEPS.includes("activo");
-        const contieneVigente = textoPlanoEPS.includes("vigente");
-
-        resultadoEPS = {
-          nombreEncontrado: nombreEncontradoEPS,
-          cedulaEncontrada: cedulaEncontradaEPS,
-          fechaDetectada,
-          fechaValida,
-          palabrasClave: {
-            afiliado: contieneAfiliado,
-            vinculado: contieneVinculado,
-            habilitado: contieneHabilitado,
-            activo: contieneActivo,
-            vigente: contieneVigente,
-          },
-          texto: textoEPS,
-        };
       }
 
       // ================================
-      // 3. PROCESAR CERTIFICADO ARL
+      // 5. PROCESAR CERTIFICADO ARL
       // ================================
 
-      const textoPlanoARL = dataARL.text.toUpperCase();
-      const lineasARL = textoPlanoARL
-        .split(/\n/)
-        .map((l) => l.trim())
-        .filter(Boolean);
-
-      // --- Validación del nombre (igual que EPS)
-      let similitudARL = 0;
-      if (lineasARL.length > 0) {
-        similitudARL = stringSimilarity.findBestMatch(nombreEsperado, lineasARL)
-          .bestMatch.rating;
-      }
-      const nombreEncontradoARL = similitudARL > 0.5;
-
-      // --- Validación de la CLASE DE RIESGO
-      let cumpleRiesgo = false;
-      let riesgoEncontrado = null;
-
-      for (const linea of lineasARL) {
-        if (linea.includes("CLASE DE RIESGO") || linea.startsWith("CLASE")) {
-          const match = linea.match(/\d+/); // Buscar el número en la línea
-          if (match) {
-            riesgoEncontrado = parseInt(match[0], 10);
-            cumpleRiesgo = riesgoEncontrado >= 4;
-          }
-          break; // salir del loop porque ya lo encontramos
-        }
+      let resultadoARL = null;
+      if (req.files.certificadoARL) {
+        resultadoARL = await validarARL(
+          req.files.certificadoARL[0].buffer,
+          nombreConductor,
+          cedula
+        );
       }
 
-      // --- Resultado ARL
-      const resultadoARL = {
-        nombreEncontrado: nombreEncontradoARL,
-        riesgoEncontrado,
-        cumpleRiesgo,
-      };
+      // ================================
+      // 6. PROCESAR CERTIFICADO PENSION
+      // ================================
+      let resultadoPension = null;
 
+      if (req.files.certificadoPension) {
+      resultadoPension = await validarPension(
+        req.files.certificadoPension[0].buffer,
+        nombreConductor,
+        cedula
+      );
+    }
       // ================================
       // RESPUESTA
       // ================================
       res.json({
+        validacionBD, 
+        documentoFormato: resultadoFormato,
         coincidencias: {
-          cedula: cedulaEncontrada,
-          nombre: nombreEncontradoCedula,
+          cedula: resultadoCedula.coincidencias.cedula,
+          nombre: resultadoCedula.coincidencias.nombre,
         },
+        // documentoLicencia: resultadoLicencia,
         documentoEPS: resultadoEPS,
-        textoCedula,
+        documentoARL: resultadoARL,
+        documentoPension: resultadoPension,
+        textoCedula: resultadoCedula.textoCedula,
       });
     } catch (err) {
       console.error(err);

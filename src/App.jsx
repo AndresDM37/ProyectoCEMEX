@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import axios from "axios";
 
 import {
@@ -19,8 +19,12 @@ function App() {
     cedula: "",
     nombreConductor: "",
   });
+  const [archivoFormato, setArchivoFormato] = useState(null);
   const [archivo, setArchivo] = useState(null);
+  const [archivoLicencia, setArchivoLicencia] = useState(null);
   const [archivoEPS, setArchivoEPS] = useState(null);
+  const [archivoARL, setArchivoARL] = useState(null); 
+  const [archivoPension, setArchivoPension] = useState(null);
   const [resultado, setResultado] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -58,8 +62,24 @@ function App() {
       }
       formData.append("documento", archivo);
 
+      if (archivoFormato) {
+        formData.append("formatoCreacion", archivoFormato);
+      }
+
+      if (archivoLicencia) {
+        formData.append("licenciaConduccion", archivoLicencia);
+      }
+
       if (archivoEPS) {
         formData.append("certificadoEPS", archivoEPS);
+      }
+
+      if (archivoARL) {
+        formData.append("certificadoARL", archivoARL);
+      }
+
+      if (archivoPension) {
+        formData.append("certificadoPension", archivoPension);
       }
 
       const res = await axios.post("http://localhost:5000/validar", formData);
@@ -104,7 +124,7 @@ function App() {
         {/* Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-50 h-16">
-            <img src="/public/images/Cemex_logo_2023.png" alt="logo" />
+            <img src="/images/Cemex_logo_2023.png" alt="logo" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
             Sistema de Validación de Documentos
@@ -130,8 +150,8 @@ function App() {
                 <div className="relative">
                   <Truck className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
                   <input
-                    name="sap"
-                    value={formulario.sap}
+                    name="codigoTransportador"
+                    value={formulario.codigoTransportador}
                     onChange={handleChange}
                     placeholder="Ingresa el código SAP"
                     className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
@@ -192,6 +212,35 @@ function App() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Formato de Creación *
+                </label>
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      setArchivoFormato(e.target.files[0]);
+                      setError("");
+                    }}
+                    className="hidden"
+                    id="formato-upload"
+                  />
+                  <label htmlFor="formato-upload" className="cursor-pointer">
+                    <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    <p className="text-sm text-gray-600">
+                      {archivoFormato
+                        ? archivoFormato.name
+                        : "Haz clic para subir formato de creación"}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      PNG, JPG hasta 10MB
+                    </p>
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Documento de Identidad *
                 </label>
                 <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
@@ -217,6 +266,35 @@ function App() {
                 </div>
               </div>
 
+              {/* <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Licencia de Conducción *
+                </label>
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      setArchivoLicencia(e.target.files[0]);
+                      setError("");
+                    }}
+                    className="hidden"
+                    id="licencia-upload"
+                  />
+                  <label htmlFor="licencia-upload" className="cursor-pointer">
+                    <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    <p className="text-sm text-gray-600">
+                      {archivoLicencia
+                        ? archivoLicencia.name
+                        : "Haz clic para subir licencia de conducción"}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      PNG, JPG hasta 10MB
+                    </p>
+                  </label>
+                </div>
+              </div> */}
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Certificado EPS *
@@ -238,6 +316,64 @@ function App() {
                       {archivoEPS
                         ? archivoEPS.name
                         : "Haz clic para subir certificado EPS"}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      PNG, JPG hasta 10MB
+                    </p>
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Certificado ARL *
+                </label>
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      setArchivoARL(e.target.files[0]);
+                      setError("");
+                    }}
+                    className="hidden"
+                    id="arl-upload"
+                  />
+                  <label htmlFor="arl-upload" className="cursor-pointer">
+                    <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    <p className="text-sm text-gray-600">
+                      {archivoARL
+                        ? archivoARL.name
+                        : "Haz clic para subir certificado ARL"}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      PNG, JPG hasta 10MB
+                    </p>
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Certificado Pensión *
+                </label>
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      setArchivoPension(e.target.files[0]);
+                      setError("");
+                    }}
+                    className="hidden"
+                    id="pension-upload"
+                  />
+                  <label htmlFor="pension-upload" className="cursor-pointer">
+                    <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    <p className="text-sm text-gray-600">
+                      {archivoPension
+                        ? archivoPension.name
+                        : "Haz clic para subir certificado PENSION"}
                     </p>
                     <p className="text-xs text-gray-400 mt-1">
                       PNG, JPG hasta 10MB
@@ -276,6 +412,12 @@ function App() {
               Resultados de Validación
             </h2>
 
+            {resultado?.validacionBD && (
+              <div className="bg-blue-50 border border-blue-200 text-blue-800 rounded-lg p-4 mb-4">
+                <p className="font-medium">{resultado.validacionBD.mensaje}</p>
+              </div>
+            )}
+
             {!resultado ? (
               <div className="text-center py-12">
                 <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -309,31 +451,118 @@ function App() {
                 />
 
                 <StatusIcon
-                  isValid={resultado.edadValida}
-                  label={`Edad ${resultado.edadValida ? "válida" : "inválida"}`}
+                  isValid={resultado.coincidencias.edadValida}
+                  label={`Edad ${
+                    resultado.coincidencias.edadValida
+                      ? "válida"
+                      : "no valida"
+                  }`}
                 />
 
+                {/* {resultado.documentoLicencia && (
+                  <div className="mt-6">
+                    <h3 className="text-lg font-medium text-gray-800 mb-2">
+                      Licencia de Conducción
+                    </h3>
+
+                    <StatusIcon
+                      isValid={resultado.documentoLicencia.categorias}
+                      label={`Categoría ${
+                        resultado.documentoLicencia.categorias
+                          ? resultado.documentoLicencia.categorias.join(", ")
+                          : "no válida (no contiene C2 ni C3)"
+                      }`}
+                    />
+
+                    <StatusIcon
+                      isValid={resultado.documentoLicencia.vigente}
+                      label={
+                        resultado.documentoLicencia.vigente
+                          ? `Vigente hasta ${new Date(
+                              resultado.documentoLicencia.vigente.fechaVigencia
+                            ).toLocaleDateString("es-CO")}`
+                          : "Licencia vencida"
+                      }
+                    />
+                  </div>
+                )} */}
+
+                {resultado.documentoFormato && (
+                  <div className="mt-6">
+                    <h3 className="text-lg font-medium text-gray-800 mb-2">
+                      Formato de Creación
+                    </h3>
+                    <StatusIcon
+                      isValid={resultado.documentoFormato.codigoTransportador.coincide}
+                      label={`Código Transportador ${
+                        resultado.documentoFormato.codigoTransportador.coincide
+                          ? "coincide"
+                          : "no coincide"
+                      }`}
+                    />
+
+                    <StatusIcon
+                      isValid={resultado.documentoFormato.transportador.coincide}
+                      label={`Nombre Transportador ${
+                        resultado.documentoFormato.transportador.coincide
+                          ? "encontrado"
+                          : "no coincide"
+                      }`}
+                    />
+
+                    <StatusIcon
+                      isValid={resultado.documentoFormato.conductor.cedula.coincide}
+                      label={`Cédula Conductor ${
+                        resultado.documentoFormato.conductor.cedula.coincide
+                          ? "encontrada"
+                          : "no coincide"
+                      }`}
+                    />
+
+                    <StatusIcon
+                      isValid={resultado.documentoFormato.conductor.nombre.coincide}
+                      label={`Nombre Conductor ${
+                        resultado.documentoFormato.conductor.nombre.coincide
+                          ? "encontrado"
+                          : "no coincide"
+                      }`}
+                    />
+                  </div>
+                )}
+
                 {resultado.documentoEPS && (
                   <div className="mt-6">
                     <h3 className="text-lg font-medium text-gray-800 mb-2">
                       Certificado EPS
                     </h3>
+
                     <StatusIcon
                       isValid={resultado.documentoEPS.nombreEncontrado}
-                      label="Nombre encontrado en EPS"
+                      label={
+                        resultado.documentoEPS.nombreEncontrado
+                          ? "Nombre coincide con el certificado"
+                          : "Nombre no encontrado"
+                      }
                     />
+
                     <StatusIcon
                       isValid={resultado.documentoEPS.cedulaEncontrada}
-                      label="Cédula encontrada en EPS"
+                      label={
+                        resultado.documentoEPS.cedulaEncontrada
+                          ? "Cédula encontrada en EPS"
+                          : "Cédula no coincide"
+                      }
                     />
+
                     <StatusIcon
                       isValid={resultado.documentoEPS.fechaValida}
                       label={
                         resultado.documentoEPS.fechaValida
-                          ? "Fecha válida (menos de 30 días)"
+                          ? `Fecha válida (emitido hace ${resultado.documentoEPS.diffDias} días)`
                           : "Documento vencido (más de 30 días)"
                       }
                     />
+
                     <div className="space-y-2 mt-2">
                       {Object.entries(resultado.documentoEPS.palabrasClave).map(
                         ([clave, valor]) => (
@@ -348,29 +577,37 @@ function App() {
                   </div>
                 )}
 
-                {resultado.documentoEPS && (
+                {resultado.documentoARL && (
                   <div className="mt-6">
                     <h3 className="text-lg font-medium text-gray-800 mb-2">
-                      Certificado EPS
+                      Certificado ARL
                     </h3>
                     <StatusIcon
-                      isValid={resultado.documentoEPS.nombreEncontrado}
-                      label="Nombre encontrado en EPS"
+                      isValid={resultado.documentoARL.nombreEncontrado}
+                      label="Nombre encontrado en ARL"
                     />
                     <StatusIcon
-                      isValid={resultado.documentoEPS.cedulaEncontrada}
-                      label="Cédula encontrada en EPS"
+                      isValid={resultado.documentoARL.cedulaEncontrada}
+                      label="Cédula encontrada en ARL"
                     />
                     <StatusIcon
-                      isValid={resultado.documentoEPS.fechaValida}
+                      isValid={resultado.documentoARL.cumpleRiesgo}
                       label={
-                        resultado.documentoEPS.fechaValida
-                          ? "Fecha válida (menos de 30 días)"
+                        resultado.documentoARL.cumpleRiesgo
+                          ? `Clase de riesgo válida (≥ 4) - Clase ${resultado.documentoARL.riesgoEncontrado}`
+                          : `Clase de riesgo no cumple (menor a 4) - Clase ${resultado.documentoARL.riesgoEncontrado || "No encontrada"}`
+                      }
+                    />
+                    <StatusIcon
+                      isValid={resultado.documentoARL.fechaValida}
+                      label={
+                        resultado.documentoARL.fechaValida
+                          ? `Fecha válida (emitido hace ${resultado.documentoARL.diffDias} días)`
                           : "Documento vencido (más de 30 días)"
                       }
                     />
                     <div className="space-y-2 mt-2">
-                      {Object.entries(resultado.documentoEPS.palabrasClave).map(
+                      {Object.entries(resultado.documentoARL.palabrasClave).map(
                         ([clave, valor]) => (
                           <StatusIcon
                             key={clave}
@@ -383,28 +620,38 @@ function App() {
                   </div>
                 )}
 
-                {resultado.texto && (
+                {resultado.documentoPension && (
                   <div className="mt-6">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-lg font-medium text-gray-800">
-                        Texto Extraído
-                      </h3>
-                      <button
-                        onClick={() => setShowPreview(!showPreview)}
-                        className="flex items-center text-blue-600 hover:text-blue-700 text-sm"
-                      >
-                        <Eye className="w-4 h-4 mr-1" />
-                        {showPreview ? "Ocultar" : "Ver detalles"}
-                      </button>
+                    <h3 className="text-lg font-medium text-gray-800 mb-2">
+                      Certificado Pensión
+                    </h3>
+                    <StatusIcon
+                      isValid={resultado.documentoPension.nombreEncontrado}
+                      label="Nombre encontrado en Pensión"
+                    />
+                    <StatusIcon
+                      isValid={resultado.documentoPension.cedulaEncontrada}
+                      label="Cédula encontrada en Pensión"
+                    />
+                    <StatusIcon
+                      isValid={resultado.documentoPension.fechaValida}
+                      label={
+                        resultado.documentoPension.fechaValida
+                          ? `Fecha válida (emitido hace ${resultado.documentoARL.diffDias} días)`
+                          : "Documento vencido (más de 30 días)"
+                      }
+                    />
+                    <div className="space-y-2 mt-2">
+                      {Object.entries(resultado.documentoPension.palabrasClave).map(
+                        ([clave, valor]) => (
+                          <StatusIcon
+                            key={clave}
+                            isValid={valor}
+                            label={`Contiene "${clave}"`}
+                          />
+                        )
+                      )}
                     </div>
-
-                    {showPreview && (
-                      <div className="bg-gray-50 rounded-lg p-4 max-h-64 overflow-y-auto">
-                        <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono">
-                          {resultado.texto}
-                        </pre>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>

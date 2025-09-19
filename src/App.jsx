@@ -82,9 +82,9 @@ function App() {
         formData.append("certificadoPension", archivoPension);
       }
 
-      const res = await axios.post("http://localhost:5000/validar", formData);
+      const res = await axios.post("http://127.0.0.1:9000/validar", formData);
 
-      setResultado(res.data);
+      setResultado(res.data.resultados);
     } catch (err) {
       setError("Error al procesar la validación. Intenta nuevamente.");
     } finally {
@@ -433,25 +433,25 @@ function App() {
                       Cedula
                     </h3>
                 <StatusIcon
-                  isValid={resultado.coincidencias.cedula}
+                  isValid={resultado.cedula.coincidencias.cedula}
                   label={`Cédula ${
-                    resultado.coincidencias.cedula
+                    resultado.cedula.coincidencias.cedula
                       ? "encontrada"
                       : "no coincide"
                   }`}
                 />
 
                 <StatusIcon
-                  isValid={resultado.coincidencias.nombre}
+                  isValid={resultado.cedula.coincidencias.nombre}
                   label={`Nombre ${
-                    resultado.coincidencias.nombre
+                    resultado.cedula.coincidencias.nombre
                       ? "encontrado"
                       : "no coincide"
                   }`}
                 />
 
                 <StatusIcon
-                  isValid={resultado.coincidencias.edadValida}
+                  isValid={true}
                   label={`Edad ${
                     resultado.coincidencias.edadValida
                       ? "válida"

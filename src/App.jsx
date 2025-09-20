@@ -10,6 +10,7 @@ import {
   CreditCard,
   Truck,
   Eye,
+  Image as ImageIcon, // CAMBIO: Renombrar Image como ImageIcon
 } from "lucide-react";
 
 function App() {
@@ -23,7 +24,7 @@ function App() {
   const [archivo, setArchivo] = useState(null);
   const [archivoLicencia, setArchivoLicencia] = useState(null);
   const [archivoEPS, setArchivoEPS] = useState(null);
-  const [archivoARL, setArchivoARL] = useState(null); 
+  const [archivoARL, setArchivoARL] = useState(null);
   const [archivoPension, setArchivoPension] = useState(null);
   const [resultado, setResultado] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -33,6 +34,30 @@ function App() {
   const handleChange = (e) => {
     setFormulario({ ...formulario, [e.target.name]: e.target.value });
     setError(""); // Limpiar error al cambiar campos
+  };
+
+  // Función para validar archivos
+  const validarArchivo = (file) => {
+    const tiposPermitidos = [
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "application/pdf",
+    ];
+
+    const tamañoMaximo = 10 * 1024 * 1024; // 10MB
+
+    if (!tiposPermitidos.includes(file.type)) {
+      throw new Error(
+        "Tipo de archivo no permitido. Solo se aceptan JPG, PNG y PDF."
+      );
+    }
+
+    if (file.size > tamañoMaximo) {
+      throw new Error("El archivo es demasiado grande. Máximo 10MB.");
+    }
+
+    return true;
   };
 
   const handleSubmit = async (e) => {
@@ -82,11 +107,15 @@ function App() {
         formData.append("certificadoPension", archivoPension);
       }
 
-      const res = await axios.post("http://127.0.0.1:9000/validar", formData);
+      const res = await axios.post("http://localhost:5000/validar", formData);
 
-      setResultado(res.data.resultados);
+      setResultado(res.data);
     } catch (err) {
-      setError("Error al procesar la validación. Intenta nuevamente.");
+      console.error("Error en validación:", err);
+      setError(
+        err.response?.data?.error ||
+          "Error al procesar la validación. Intenta nuevamente."
+      );
     } finally {
       setLoading(false);
     }
@@ -97,12 +126,62 @@ function App() {
     return soloNumeros.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
   }
 
+  // Función para manejar el cambio de archivo
   const handleFileChange = (e) => {
     const file = e.target.files[0];
-    setArchivo(file);
-    setError("");
+    if (file) {
+      try {
+        validarArchivo(file);
+        setArchivo(file);
+        // Limpiar cualquier error previo
+        setError("");
+      } catch (error) {
+        setError(error.message);
+        e.target.value = ""; // Limpiar el input
+        setArchivo(null);
+      }
+    }
   };
 
+  // FUNCIÓN CORREGIDA: Usar ImageIcon en lugar de Image
+  const obtenerIconoArchivo = (archivo) => {
+    if (!archivo)
+      return <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />;
+
+    if (archivo.type === "application/pdf") {
+      return <FileText className="w-8 h-8 text-red-500 mx-auto mb-2" />;
+    } else {
+      return <ImageIcon className="w-8 h-8 text-blue-500 mx-auto mb-2" />;
+    }
+  };
+
+  // Agregar esta función en tu componente App
+  const limpiarFormulario = () => {
+    // Limpiar estados del formulario
+    setFormulario({
+      codigoTransportador: "",
+      nombreTransportador: "",
+      cedula: "",
+      nombreConductor: "",
+    });
+
+    // Limpiar archivos
+    setArchivoFormato(null);
+    setArchivo(null);
+    setArchivoLicencia(null);
+    setArchivoEPS(null);
+    setArchivoARL(null);
+    setArchivoPension(null);
+
+    // Limpiar resultados y errores
+    setResultado(null);
+    setError("");
+    setLoading(false);
+
+    // Limpiar inputs de archivos del DOM
+    const fileInputs = document.querySelectorAll('input[type="file"]');
+    fileInputs.forEach((input) => (input.value = ""));
+  };
   const StatusIcon = ({ isValid, label }) => (
     <div
       className={`flex items-center space-x-2 p-3 rounded-lg ${
@@ -217,23 +296,43 @@ function App() {
                 <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
                   <input
                     type="file"
-                    accept="image/*"
+                    accept="image/*,.pdf"
                     onChange={(e) => {
-                      setArchivoFormato(e.target.files[0]);
-                      setError("");
+                      const file = e.target.files[0];
+                      if (file) {
+                        try {
+                          validarArchivo(file);
+                          setArchivoFormato(file);
+                          setError("");
+                        } catch (error) {
+                          setError(error.message);
+                          e.target.value = "";
+                          setArchivoFormato(null);
+                        }
+                      }
                     }}
                     className="hidden"
                     id="formato-upload"
                   />
                   <label htmlFor="formato-upload" className="cursor-pointer">
-                    <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    {!archivoFormato ? (
+                      <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    ) : archivoFormato.type === "application/pdf" ? (
+                      <FileText className="w-8 h-8 text-red-500 mx-auto mb-2" />
+                    ) : (
+                      <ImageIcon className="w-8 h-8 text-blue-500 mx-auto mb-2" />
+                    )}
                     <p className="text-sm text-gray-600">
                       {archivoFormato
-                        ? archivoFormato.name
+                        ? `${archivoFormato.name} (${(
+                            archivoFormato.size /
+                            1024 /
+                            1024
+                          ).toFixed(2)} MB)`
                         : "Haz clic para subir formato de creación"}
                     </p>
                     <p className="text-xs text-gray-400 mt-1">
-                      PNG, JPG hasta 10MB
+                      PNG, JPG, PDF hasta 10MB
                     </p>
                   </label>
                 </div>
@@ -246,54 +345,30 @@ function App() {
                 <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
                   <input
                     type="file"
-                    accept="image/*"
+                    accept="image/*,.pdf"
                     onChange={handleFileChange}
                     className="hidden"
                     id="file-upload"
                     required
                   />
                   <label htmlFor="file-upload" className="cursor-pointer">
-                    <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    {obtenerIconoArchivo(archivo)}
                     <p className="text-sm text-gray-600">
                       {archivo
-                        ? archivo.name
-                        : "Haz clic para subir una imagen"}
+                        ? `${archivo.name} (${(
+                            archivo.size /
+                            1024 /
+                            1024
+                          ).toFixed(2)} MB)`
+                        : "Haz clic para subir un archivo"}
                     </p>
                     <p className="text-xs text-gray-400 mt-1">
-                      PNG, JPG hasta 10MB
+                      PNG, JPG, PDF hasta 10MB
                     </p>
                   </label>
                 </div>
+                {error && <p className="text-red-500 text-xs mt-2">{error}</p>}
               </div>
-
-              {/* <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Licencia de Conducción *
-                </label>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => {
-                      setArchivoLicencia(e.target.files[0]);
-                      setError("");
-                    }}
-                    className="hidden"
-                    id="licencia-upload"
-                  />
-                  <label htmlFor="licencia-upload" className="cursor-pointer">
-                    <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                    <p className="text-sm text-gray-600">
-                      {archivoLicencia
-                        ? archivoLicencia.name
-                        : "Haz clic para subir licencia de conducción"}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-1">
-                      PNG, JPG hasta 10MB
-                    </p>
-                  </label>
-                </div>
-              </div> */}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -302,23 +377,43 @@ function App() {
                 <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
                   <input
                     type="file"
-                    accept="image/*"
+                    accept="image/*,.pdf"
                     onChange={(e) => {
-                      setArchivoEPS(e.target.files[0]);
-                      setError("");
+                      const file = e.target.files[0];
+                      if (file) {
+                        try {
+                          validarArchivo(file);
+                          setArchivoEPS(file);
+                          setError("");
+                        } catch (error) {
+                          setError(error.message);
+                          e.target.value = "";
+                          setArchivoEPS(null);
+                        }
+                      }
                     }}
                     className="hidden"
                     id="eps-upload"
                   />
                   <label htmlFor="eps-upload" className="cursor-pointer">
-                    <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    {!archivoEPS ? (
+                      <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    ) : archivoEPS.type === "application/pdf" ? (
+                      <FileText className="w-8 h-8 text-red-500 mx-auto mb-2" />
+                    ) : (
+                      <ImageIcon className="w-8 h-8 text-blue-500 mx-auto mb-2" />
+                    )}
                     <p className="text-sm text-gray-600">
                       {archivoEPS
-                        ? archivoEPS.name
+                        ? `${archivoEPS.name} (${(
+                            archivoEPS.size /
+                            1024 /
+                            1024
+                          ).toFixed(2)} MB)`
                         : "Haz clic para subir certificado EPS"}
                     </p>
                     <p className="text-xs text-gray-400 mt-1">
-                      PNG, JPG hasta 10MB
+                      PNG, JPG, PDF hasta 10MB
                     </p>
                   </label>
                 </div>
@@ -331,23 +426,43 @@ function App() {
                 <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
                   <input
                     type="file"
-                    accept="image/*"
+                    accept="image/*,.pdf"
                     onChange={(e) => {
-                      setArchivoARL(e.target.files[0]);
-                      setError("");
+                      const file = e.target.files[0];
+                      if (file) {
+                        try {
+                          validarArchivo(file);
+                          setArchivoARL(file);
+                          setError("");
+                        } catch (error) {
+                          setError(error.message);
+                          e.target.value = "";
+                          setArchivoARL(null);
+                        }
+                      }
                     }}
                     className="hidden"
                     id="arl-upload"
                   />
                   <label htmlFor="arl-upload" className="cursor-pointer">
-                    <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    {!archivoARL ? (
+                      <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    ) : archivoARL.type === "application/pdf" ? (
+                      <FileText className="w-8 h-8 text-red-500 mx-auto mb-2" />
+                    ) : (
+                      <ImageIcon className="w-8 h-8 text-blue-500 mx-auto mb-2" />
+                    )}
                     <p className="text-sm text-gray-600">
                       {archivoARL
-                        ? archivoARL.name
+                        ? `${archivoARL.name} (${(
+                            archivoARL.size /
+                            1024 /
+                            1024
+                          ).toFixed(2)} MB)`
                         : "Haz clic para subir certificado ARL"}
                     </p>
                     <p className="text-xs text-gray-400 mt-1">
-                      PNG, JPG hasta 10MB
+                      PNG, JPG, PDF hasta 10MB
                     </p>
                   </label>
                 </div>
@@ -360,23 +475,43 @@ function App() {
                 <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
                   <input
                     type="file"
-                    accept="image/*"
+                    accept="image/*,.pdf"
                     onChange={(e) => {
-                      setArchivoPension(e.target.files[0]);
-                      setError("");
+                      const file = e.target.files[0];
+                      if (file) {
+                        try {
+                          validarArchivo(file);
+                          setArchivoPension(file);
+                          setError("");
+                        } catch (error) {
+                          setError(error.message);
+                          e.target.value = "";
+                          setArchivoPension(null);
+                        }
+                      }
                     }}
                     className="hidden"
                     id="pension-upload"
                   />
                   <label htmlFor="pension-upload" className="cursor-pointer">
-                    <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    {!archivoPension ? (
+                      <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    ) : archivoPension.type === "application/pdf" ? (
+                      <FileText className="w-8 h-8 text-red-500 mx-auto mb-2" />
+                    ) : (
+                      <ImageIcon className="w-8 h-8 text-blue-500 mx-auto mb-2" />
+                    )}
                     <p className="text-sm text-gray-600">
                       {archivoPension
-                        ? archivoPension.name
+                        ? `${archivoPension.name} (${(
+                            archivoPension.size /
+                            1024 /
+                            1024
+                          ).toFixed(2)} MB)`
                         : "Haz clic para subir certificado PENSION"}
                     </p>
                     <p className="text-xs text-gray-400 mt-1">
-                      PNG, JPG hasta 10MB
+                      PNG, JPG, PDF hasta 10MB
                     </p>
                   </label>
                 </div>
@@ -430,21 +565,21 @@ function App() {
             ) : (
               <div className="space-y-4">
                 <h3 className="text-lg font-medium text-gray-800 mb-2">
-                      Cedula
-                    </h3>
+                  Cedula
+                </h3>
                 <StatusIcon
-                  isValid={resultado.cedula.coincidencias.cedula}
+                  isValid={resultado.coincidencias.cedula}
                   label={`Cédula ${
-                    resultado.cedula.coincidencias.cedula
+                    resultado.coincidencias.cedula
                       ? "encontrada"
                       : "no coincide"
                   }`}
                 />
 
                 <StatusIcon
-                  isValid={resultado.cedula.coincidencias.nombre}
+                  isValid={resultado.coincidencias.nombre}
                   label={`Nombre ${
-                    resultado.cedula.coincidencias.nombre
+                    resultado.coincidencias.nombre
                       ? "encontrado"
                       : "no coincide"
                   }`}
@@ -453,39 +588,9 @@ function App() {
                 <StatusIcon
                   isValid={true}
                   label={`Edad ${
-                    resultado.coincidencias.edadValida
-                      ? "válida"
-                      : "no valida"
+                    resultado.coincidencias.edadValida ? "válida" : "no valida"
                   }`}
                 />
-
-                {/* {resultado.documentoLicencia && (
-                  <div className="mt-6">
-                    <h3 className="text-lg font-medium text-gray-800 mb-2">
-                      Licencia de Conducción
-                    </h3>
-
-                    <StatusIcon
-                      isValid={resultado.documentoLicencia.categorias}
-                      label={`Categoría ${
-                        resultado.documentoLicencia.categorias
-                          ? resultado.documentoLicencia.categorias.join(", ")
-                          : "no válida (no contiene C2 ni C3)"
-                      }`}
-                    />
-
-                    <StatusIcon
-                      isValid={resultado.documentoLicencia.vigente}
-                      label={
-                        resultado.documentoLicencia.vigente
-                          ? `Vigente hasta ${new Date(
-                              resultado.documentoLicencia.vigente.fechaVigencia
-                            ).toLocaleDateString("es-CO")}`
-                          : "Licencia vencida"
-                      }
-                    />
-                  </div>
-                )} */}
 
                 {resultado.documentoFormato && (
                   <div className="mt-6">
@@ -493,7 +598,9 @@ function App() {
                       Formato de Creación
                     </h3>
                     <StatusIcon
-                      isValid={resultado.documentoFormato.codigoTransportador.coincide}
+                      isValid={
+                        resultado.documentoFormato.codigoTransportador.coincide
+                      }
                       label={`Código Transportador ${
                         resultado.documentoFormato.codigoTransportador.coincide
                           ? "coincide"
@@ -502,7 +609,9 @@ function App() {
                     />
 
                     <StatusIcon
-                      isValid={resultado.documentoFormato.transportador.coincide}
+                      isValid={
+                        resultado.documentoFormato.transportador.coincide
+                      }
                       label={`Nombre Transportador ${
                         resultado.documentoFormato.transportador.coincide
                           ? "encontrado"
@@ -511,7 +620,9 @@ function App() {
                     />
 
                     <StatusIcon
-                      isValid={resultado.documentoFormato.conductor.cedula.coincide}
+                      isValid={
+                        resultado.documentoFormato.conductor.cedula.coincide
+                      }
                       label={`Cédula Conductor ${
                         resultado.documentoFormato.conductor.cedula.coincide
                           ? "encontrada"
@@ -520,7 +631,9 @@ function App() {
                     />
 
                     <StatusIcon
-                      isValid={resultado.documentoFormato.conductor.nombre.coincide}
+                      isValid={
+                        resultado.documentoFormato.conductor.nombre.coincide
+                      }
                       label={`Nombre Conductor ${
                         resultado.documentoFormato.conductor.nombre.coincide
                           ? "encontrado"
@@ -595,7 +708,10 @@ function App() {
                       label={
                         resultado.documentoARL.cumpleRiesgo
                           ? `Clase de riesgo válida (≥ 4) - Clase ${resultado.documentoARL.riesgoEncontrado}`
-                          : `Clase de riesgo no cumple (menor a 4) - Clase ${resultado.documentoARL.riesgoEncontrado || "No encontrada"}`
+                          : `Clase de riesgo no cumple (menor a 4) - Clase ${
+                              resultado.documentoARL.riesgoEncontrado ||
+                              "No encontrada"
+                            }`
                       }
                     />
                     <StatusIcon
@@ -637,22 +753,31 @@ function App() {
                       isValid={resultado.documentoPension.fechaValida}
                       label={
                         resultado.documentoPension.fechaValida
-                          ? `Fecha válida (emitido hace ${resultado.documentoARL.diffDias} días)`
+                          ? `Fecha válida (emitido hace ${resultado.documentoPension.diffDias} días)`
                           : "Documento vencido (más de 30 días)"
                       }
                     />
                     <div className="space-y-2 mt-2">
-                      {Object.entries(resultado.documentoPension.palabrasClave).map(
-                        ([clave, valor]) => (
-                          <StatusIcon
-                            key={clave}
-                            isValid={valor}
-                            label={`Contiene "${clave}"`}
-                          />
-                        )
-                      )}
+                      {Object.entries(
+                        resultado.documentoPension.palabrasClave
+                      ).map(([clave, valor]) => (
+                        <StatusIcon
+                          key={clave}
+                          isValid={valor}
+                          label={`Contiene "${clave}"`}
+                        />
+                      ))}
                     </div>
                   </div>
+                )}
+
+                {resultado && (
+                  <button
+                    onClick={limpiarFormulario}
+                    className="w-full bg-green-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-green-700 transition-all mt-4"
+                  >
+                    Revisar Nuevo Conductor
+                  </button>
                 )}
               </div>
             )}

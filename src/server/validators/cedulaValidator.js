@@ -1,5 +1,9 @@
 import Tesseract from "tesseract.js";
 import stringSimilarity from "string-similarity";
+import pdf from "pdf-poppler";
+import fs from "fs";
+import path from "path";
+import os from "os";
 
 function normalizeText(s) {
   return (s || "")
@@ -9,6 +13,73 @@ function normalizeText(s) {
     .replace(/[^a-z0-9\s]/g, " ") // limpiar símbolos raros
     .replace(/\s+/g, " ")
     .trim();
+}
+
+// Función para detectar si el buffer es un PDF
+function isPDF(buffer) {
+  return buffer.slice(0, 4).toString() === '%PDF';
+}
+
+// Función para convertir PDF a imagen usando pdf-poppler
+async function convertPDFToImage(pdfBuffer) {
+  const tempDir = os.tmpdir();
+  const tempPDFPath = path.join(tempDir, `temp_pdf_${Date.now()}.pdf`);
+  const outputDir = path.join(tempDir, `pdf_images_${Date.now()}`);
+  
+  try {
+    // Crear directorio para las imágenes
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+    }
+    
+    // Escribir el buffer a un archivo temporal
+    fs.writeFileSync(tempPDFPath, pdfBuffer);
+    
+    // Configurar opciones de conversión
+    const options = {
+      format: 'png',
+      out_dir: outputDir,
+      out_prefix: 'page',
+      page: 1, // Solo convertir la primera página
+      single_file: true,
+      print_command: false,
+      density: 300, // DPI alta para mejor calidad OCR
+      size: '2000x2000' // Tamaño máximo
+    };
+    
+    console.log("🔄 Convirtiendo PDF a imagen...");
+    
+    // Convertir PDF a imagen
+    const result = await pdf.convert(tempPDFPath, options);
+    
+    // Buscar el archivo generado
+    const files = fs.readdirSync(outputDir);
+    const imageFile = files.find(file => file.startsWith('page') && file.endsWith('.png'));
+    
+    if (!imageFile) {
+      throw new Error('No se pudo generar la imagen del PDF');
+    }
+    
+    const imagePath = path.join(outputDir, imageFile);
+    const imageBuffer = fs.readFileSync(imagePath);
+    
+    // Limpiar archivos temporales
+    fs.unlinkSync(tempPDFPath);
+    fs.rmSync(outputDir, { recursive: true, force: true });
+    
+    console.log("✅ PDF convertido exitosamente a imagen");
+    return imageBuffer;
+    
+  } catch (error) {
+    // Limpiar archivos temporales en caso de error
+    if (fs.existsSync(tempPDFPath)) {
+      fs.unlinkSync(tempPDFPath);
+    }
+    if (fs.existsSync(outputDir)) {
+      fs.rmSync(outputDir, { recursive: true, force: true });
+    }
+    throw new Error(`Error convirtiendo PDF con poppler: ${error.message}`);
+  }
 }
 
 export const validarCedula = async (
@@ -24,15 +95,42 @@ export const validarCedula = async (
   );
 
   try {
-    // === MÉTODO MÁS BÁSICO POSIBLE ===
-    console.log("🔍 Ejecutando OCR con sintaxis mínima...");
+    let bufferParaOCR = fileBufferCedula;
+    let tipoDocumento = "imagen";
+    
+    // Detectar si es PDF y convertir a imagen
+    if (isPDF(fileBufferCedula)) {
+      console.log("📄 Detectado archivo PDF, convirtiendo con poppler...");
+      tipoDocumento = "PDF convertido con poppler";
+      
+      try {
+        bufferParaOCR = await convertPDFToImage(fileBufferCedula);
+        console.log("✅ PDF convertido exitosamente");
+      } catch (pdfError) {
+        console.error("❌ Error convirtiendo PDF:", pdfError.message);
+        throw new Error(`No se pudo procesar el PDF: ${pdfError.message}`);
+      }
+    }
 
-    const result = await Tesseract.recognize(fileBufferCedula, "spa");
+    // === CONFIGURACIÓN OPTIMIZADA DE OCR ===
+    const ocrOptions = {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          console.log(`OCR Progress: ${Math.round(m.progress * 100)}%`);
+        }
+      },
+      tessedit_pageseg_mode: '1', // Segmentación automática de página
+      tessedit_ocr_engine_mode: '2', // Solo motor LSTM
+      tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÁÉÍÓÚáéíóúÑñ0123456789 .-',
+      preserve_interword_spaces: '1'
+    };
 
+    console.log("🔍 Ejecutando OCR con configuración optimizada...");
+
+    const result = await Tesseract.recognize(bufferParaOCR, "spa", ocrOptions);
     let textoCedula = result.data.text || "";
 
-    console.log("OCR Extraido: ", textoCedula);
-
+    console.log("OCR Extraído:", textoCedula);
     console.log("✅ OCR completado");
     console.log("📝 Longitud del texto:", textoCedula.length);
     console.log(
@@ -41,36 +139,28 @@ export const validarCedula = async (
     );
 
     // Si el texto es muy corto, intentar con inglés también
-    if (textoCedula.length < 10) {
+    if (textoCedula.length < 15) {
       console.log("⚠️ Texto muy corto, intentando con inglés...");
 
-      const result2 = await Tesseract.recognize(fileBufferCedula, "eng");
-
+      const result2 = await Tesseract.recognize(bufferParaOCR, "eng", ocrOptions);
       const texto2 = result2.data.text || "";
+      
       if (texto2.length > textoCedula.length) {
         textoCedula = texto2;
         console.log("✅ Inglés funcionó mejor");
-        console.log(
-          "🔍 Nuevo texto:",
-          texto2.substring(0, 200) + (texto2.length > 200 ? "..." : "")
-        );
       }
     }
 
     // Si aún es corto, intentar con idioma combinado
-    if (textoCedula.length < 10) {
+    if (textoCedula.length < 15) {
       console.log("⚠️ Aún muy corto, intentando con esp+eng...");
 
-      const result3 = await Tesseract.recognize(fileBufferCedula, "spa+eng");
-
+      const result3 = await Tesseract.recognize(bufferParaOCR, "spa+eng", ocrOptions);
       const texto3 = result3.data.text || "";
+      
       if (texto3.length > textoCedula.length) {
         textoCedula = texto3;
         console.log("✅ Idioma combinado funcionó mejor");
-        console.log(
-          "🔍 Nuevo texto:",
-          texto3.substring(0, 200) + (texto3.length > 200 ? "..." : "")
-        );
       }
     }
 
@@ -83,12 +173,12 @@ export const validarCedula = async (
     );
 
     // === VALIDACIÓN DE CÉDULA ===
-    const cedulaLimpia = (cedula || "").replace(/\D/g, ""); // quitar todo menos dígitos
+    const cedulaLimpia = (cedula || "").replace(/\D/g, "");
     console.log("🎯 Buscando cédula:", cedulaLimpia);
 
-    // Extraer números del OCR, pero normalizando puntos y comas
-    let numerosEnTexto = (textoCedula.match(/[\d\.\,]+/g) || []).map(
-      (n) => n.replace(/[\.,\s]/g, "") // quitar separadores
+    // Extraer números del OCR, normalizando puntos y comas
+    let numerosEnTexto = (textoCedula.match(/[\d\.\,\s]+/g) || []).map(
+      (n) => n.replace(/[\.,\s]/g, "")
     );
 
     const numerosLargos = numerosEnTexto.filter((n) => n.length >= 6);
@@ -126,7 +216,7 @@ export const validarCedula = async (
           numero,
           cedulaLimpia
         );
-        if (similitud > 0.65) {
+        if (similitud > 0.7) {
           cedulaEncontrada = true;
           mejorCoincidencia = numero;
           tipoCoincidencia = `fuzzy (${Math.round(similitud * 100)}%)`;
@@ -135,17 +225,20 @@ export const validarCedula = async (
       }
     }
 
-    // 4. Coincidencia tolerando diferencia de longitud
+    // 4. Coincidencia parcial mejorada
     if (!cedulaEncontrada) {
       for (let numero of numerosLargos) {
-        if (
-          Math.abs(numero.length - cedulaLimpia.length) <= 2 &&
-          numero.startsWith(cedulaLimpia.slice(0, 4))
-        ) {
-          cedulaEncontrada = true;
-          mejorCoincidencia = numero;
-          tipoCoincidencia = "longitud cercana con prefijo igual";
-          break;
+        // Comparar prefijos y sufijos
+        if (numero.length >= 8 && cedulaLimpia.length >= 8) {
+          const prefijo = cedulaLimpia.slice(0, 6);
+          const sufijo = cedulaLimpia.slice(-4);
+          
+          if (numero.includes(prefijo) || numero.includes(sufijo)) {
+            cedulaEncontrada = true;
+            mejorCoincidencia = numero;
+            tipoCoincidencia = "coincidencia parcial mejorada";
+            break;
+          }
         }
       }
     }
@@ -175,7 +268,7 @@ export const validarCedula = async (
         }
       }
 
-      // Búsqueda fuzzy
+      // Búsqueda fuzzy mejorada
       const palabrasTexto = textoPlanoCedula.split(/\s+/);
       for (let palabraTexto of palabrasTexto) {
         if (palabraTexto.length >= 3) {
@@ -183,10 +276,11 @@ export const validarCedula = async (
             palabra,
             palabraTexto
           );
-          if (similitud > 0.6) {
+          if (similitud > 0.65) {
             palabrasEncontradas.push({
               palabra,
               tipo: `fuzzy (${Math.round(similitud * 100)}%)`,
+              palabraEncontrada: palabraTexto
             });
             break;
           }
@@ -222,8 +316,10 @@ export const validarCedula = async (
         totalPalabrasEsperadas: palabrasNombre.length,
         porcentajePalabras: porcentajePalabras,
         longitudTextoOCR: textoCedula.length,
+        calidadOCR: textoCedula.length > 50 ? "alta" : textoCedula.length > 20 ? "media" : "baja",
       },
       debug: {
+        tipoDocumento,
         nombreEsperado,
         palabrasNombre,
         palabrasEncontradasDetalle: palabrasEncontradas,
@@ -232,7 +328,8 @@ export const validarCedula = async (
         mejorCoincidenciaCedula: mejorCoincidencia,
         tipoCoincidencia,
         longitudTextoOriginal: textoCedula.length,
-        entorno: "Node.js Simple",
+        entorno: "Node.js con pdf-poppler",
+        configOCR: "optimizada para documentos",
       },
     };
 
@@ -259,13 +356,12 @@ export const validarCedula = async (
         porcentajePalabras: 0,
         palabrasClaveDocumento: 0,
         longitudTextoOCR: 0,
-        edad: null,
-        fechaNacimiento: null,
+        calidadOCR: "error",
       },
       debug: {
         error: error.message,
         stack: error.stack,
-        entorno: "Node.js Simple (Error)",
+        entorno: "Node.js con pdf-poppler (Error)",
       },
     };
   }

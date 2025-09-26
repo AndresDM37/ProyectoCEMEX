@@ -15,7 +15,7 @@ import {
 
 function App() {
   const [formulario, setFormulario] = useState({
-    sap: "",
+    codigoTransportador: "",
     nombreTransportador: "",
     cedula: "",
     nombreConductor: "",
@@ -26,6 +26,9 @@ function App() {
   const [archivoEPS, setArchivoEPS] = useState(null);
   const [archivoARL, setArchivoARL] = useState(null);
   const [archivoPension, setArchivoPension] = useState(null);
+  const [archivoPoder, setArchivoPoder] = useState(null);
+  const [archivoCertificadoLicencia, setArchivoCertificadoLicencia] =
+    useState(null);
   const [resultado, setResultado] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -107,6 +110,14 @@ function App() {
         formData.append("certificadoPension", archivoPension);
       }
 
+      if (archivoPoder) {
+        formData.append("formatoPoder", archivoPoder);
+      }
+
+      if (archivoCertificadoLicencia) {
+        formData.append("certificadoLicencia", archivoCertificadoLicencia);
+      }
+
       const res = await axios.post("http://localhost:5000/validar", formData);
 
       setResultado(res.data);
@@ -172,6 +183,8 @@ function App() {
     setArchivoEPS(null);
     setArchivoARL(null);
     setArchivoPension(null);
+    setArchivoPoder(null);
+    setArchivoCertificadoLicencia(null);
 
     // Limpiar resultados y errores
     setResultado(null);
@@ -182,6 +195,7 @@ function App() {
     const fileInputs = document.querySelectorAll('input[type="file"]');
     fileInputs.forEach((input) => (input.value = ""));
   };
+
   const StatusIcon = ({ isValid, label }) => (
     <div
       className={`flex items-center space-x-2 p-3 rounded-lg ${
@@ -372,6 +386,55 @@ function App() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Licencia de Conducción *
+                </label>
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
+                  <input
+                    type="file"
+                    accept="image/*,.pdf"
+                    onChange={(e) => {
+                      const file = e.target.files[0];
+                      if (file) {
+                        try {
+                          validarArchivo(file);
+                          setArchivoLicencia(file);
+                          setError("");
+                        } catch (error) {
+                          setError(error.message);
+                          e.target.value = "";
+                          setArchivoLicencia(null);
+                        }
+                      }
+                    }}
+                    className="hidden"
+                    id="licencia-upload"
+                  />
+                  <label htmlFor="licencia-upload" className="cursor-pointer">
+                    {!archivoLicencia ? (
+                      <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    ) : archivoLicencia.type === "application/pdf" ? (
+                      <FileText className="w-8 h-8 text-red-500 mx-auto mb-2" />
+                    ) : (
+                      <ImageIcon className="w-8 h-8 text-blue-500 mx-auto mb-2" />
+                    )}
+                    <p className="text-sm text-gray-600">
+                      {archivoLicencia
+                        ? `${archivoLicencia.name} (${(
+                            archivoLicencia.size /
+                            1024 /
+                            1024
+                          ).toFixed(2)} MB)`
+                        : "Haz clic para subir licencia de conducción"}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      PNG, JPG, PDF hasta 10MB
+                    </p>
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Certificado EPS *
                 </label>
                 <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
@@ -517,6 +580,108 @@ function App() {
                 </div>
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  PODER *
+                </label>
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
+                  <input
+                    type="file"
+                    accept="image/*,.pdf"
+                    onChange={(e) => {
+                      const file = e.target.files[0];
+                      if (file) {
+                        try {
+                          validarArchivo(file);
+                          setArchivoPoder(file);
+                          setError("");
+                        } catch (error) {
+                          setError(error.message);
+                          e.target.value = "";
+                          setArchivoPoder(null);
+                        }
+                      }
+                    }}
+                    className="hidden"
+                    id="poder-upload"
+                  />
+                  <label htmlFor="poder-upload" className="cursor-pointer">
+                    {!archivoPoder ? (
+                      <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    ) : archivoPoder.type === "application/pdf" ? (
+                      <FileText className="w-8 h-8 text-red-500 mx-auto mb-2" />
+                    ) : (
+                      <ImageIcon className="w-8 h-8 text-blue-500 mx-auto mb-2" />
+                    )}
+                    <p className="text-sm text-gray-600">
+                      {archivoPoder
+                        ? `${archivoPoder.name} (${(
+                            archivoPoder.size /
+                            1024 /
+                            1024
+                          ).toFixed(2)} MB)`
+                        : "Haz clic para subir el PODER"}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      PNG, JPG, PDF hasta 10MB
+                    </p>
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Certificado Licencia *
+                </label>
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
+                  <input
+                    type="file"
+                    accept="image/*,.pdf"
+                    onChange={(e) => {
+                      const file = e.target.files[0];
+                      if (file) {
+                        try {
+                          validarArchivo(file);
+                          setArchivoCertificadoLicencia(file);
+                          setError("");
+                        } catch (error) {
+                          setError(error.message);
+                          e.target.value = "";
+                          setArchivoCertificadoLicencia(null);
+                        }
+                      }
+                    }}
+                    className="hidden"
+                    id="certLicencia-upload"
+                  />
+                  <label
+                    htmlFor="certLicencia-upload"
+                    className="cursor-pointer"
+                  >
+                    {!archivoCertificadoLicencia ? (
+                      <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    ) : archivoCertificadoLicencia.type ===
+                      "application/pdf" ? (
+                      <FileText className="w-8 h-8 text-red-500 mx-auto mb-2" />
+                    ) : (
+                      <ImageIcon className="w-8 h-8 text-blue-500 mx-auto mb-2" />
+                    )}
+                    <p className="text-sm text-gray-600">
+                      {archivoCertificadoLicencia
+                        ? `${archivoCertificadoLicencia.name} (${(
+                            archivoCertificadoLicencia.size /
+                            1024 /
+                            1024
+                          ).toFixed(2)} MB)`
+                        : "Haz clic para subir CERTIFICADO LICENCIA"}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      PNG, JPG, PDF hasta 10MB
+                    </p>
+                  </label>
+                </div>
+              </div>
+
               {error && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                   <p className="text-red-700 text-sm">{error}</p>
@@ -588,7 +753,7 @@ function App() {
                 <StatusIcon
                   isValid={true}
                   label={`Edad ${
-                    resultado.coincidencias.edadValida ? "válida" : "no valida"
+                    resultado.coincidencias.edadValida ? "no válida" : "válida"
                   }`}
                 />
 
@@ -638,6 +803,22 @@ function App() {
                         resultado.documentoFormato.conductor.nombre.coincide
                           ? "encontrado"
                           : "no coincide"
+                      }`}
+                    />
+                  </div>
+                )}
+
+                {resultado.documentoLicencia && (
+                  <div className="mt-6">
+                    <h3 className="text-lg font-medium text-gray-800 mb-2">
+                      Licencia de Conducción
+                    </h3>
+                    <StatusIcon
+                      isValid={true}
+                      label={`Licencia ${
+                        resultado.documentoLicencia.tieneCategoriasRequeridas
+                          ? "no válida"
+                          : "válida"
                       }`}
                     />
                   </div>
@@ -697,11 +878,19 @@ function App() {
                     </h3>
                     <StatusIcon
                       isValid={resultado.documentoARL.nombreEncontrado}
-                      label="Nombre encontrado en ARL"
+                      label={
+                        resultado.documentoARL.nombreEncontrado
+                          ? "Nombre coincide con el certificado"
+                          : "Nombre no encontrado"
+                      }
                     />
                     <StatusIcon
                       isValid={resultado.documentoARL.cedulaEncontrada}
-                      label="Cédula encontrada en ARL"
+                      label={
+                        resultado.documentoARL.cedulaEncontrada
+                          ? "Cédula coincide con el certificado"
+                          : "Cédula no encontrada"
+                      }
                     />
                     <StatusIcon
                       isValid={resultado.documentoARL.cumpleRiesgo}
@@ -743,11 +932,19 @@ function App() {
                     </h3>
                     <StatusIcon
                       isValid={resultado.documentoPension.nombreEncontrado}
-                      label="Nombre encontrado en Pensión"
+                      label={
+                        resultado.documentoPension.nombreEncontrado
+                          ? "Nombre coincide con el certificado"
+                          : "Nombre no encontrado"
+                      }
                     />
                     <StatusIcon
                       isValid={resultado.documentoPension.cedulaEncontrada}
-                      label="Cédula encontrada en Pensión"
+                      label={
+                        resultado.documentoPension.cedulaEncontrada
+                          ? "Cédula coincide con el certificado"
+                          : "Cédula no encontrada"
+                      }
                     />
                     <StatusIcon
                       isValid={resultado.documentoPension.fechaValida}
@@ -768,6 +965,80 @@ function App() {
                         />
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {resultado.documentoPoder && (
+                  <div className="mt-6">
+                    <h3 className="text-lg font-medium text-gray-800 mb-2">
+                      Poder
+                    </h3>
+
+                    <StatusIcon
+                      isValid={resultado.documentoPoder.transportadorCoincide}
+                      label={`Nombre Transportador ${
+                        resultado.documentoPoder.transportadorCoincide
+                          ? "encontrado"
+                          : "no coincide"
+                      }`}
+                    />
+
+                    <StatusIcon
+                      isValid={resultado.documentoPoder.conductorCoincide}
+                      label={`Nombre Conductor ${
+                        resultado.documentoPoder.conductorCoincide
+                          ? "encontrado"
+                          : "no coincide"
+                      }`}
+                    />
+
+                    <StatusIcon
+                      isValid={resultado.documentoPoder.cedulaCoincide}
+                      label={`Cédula Conductor ${
+                        resultado.documentoPoder.cedulaCoincide
+                          ? "encontrada"
+                          : "no coincide"
+                      }`}
+                    />
+                  </div>
+                )}
+
+                {resultado.documentoCertificadoLicencia && (
+                  <div className="mt-6">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-3">
+                      Certificado de Licencia
+                    </h3>
+
+                    {/* Validaciones básicas */}
+                    <StatusIcon
+                      isValid={
+                        resultado.documentoCertificadoLicencia.nombreEncontrado
+                      }
+                      label={
+                        resultado.documentoCertificadoLicencia.nombreEncontrado
+                          ? "Nombre coincide con el certificado"
+                          : "Nombre no encontrado"
+                      }
+                    />
+                    <StatusIcon
+                      isValid={
+                        resultado.documentoCertificadoLicencia.cedulaEncontrada
+                      }
+                      label={
+                        resultado.documentoCertificadoLicencia.cedulaEncontrada
+                          ? "Cédula coincide con el certificado"
+                          : "Cédula no encontrada"
+                      }
+                    />
+
+                      <StatusIcon
+                        isValid={true}
+                        label={
+                        resultado.documentoCertificadoLicencia.nombreEncontrado
+                            ? `Certificado válido`
+                            : "Certificado no válido"
+                        }
+                      />
                   </div>
                 )}
 

@@ -3,13 +3,14 @@ import multer, { memoryStorage } from "multer";
 import cors from "cors";
 import { validarFormatoTransportador } from "./validators/formatoValidator.js";
 import { validarCedula } from "./validators/cedulaValidator.js";
-// import { validarLicencia } from "./validators/licenciaValidator.js";
+import { validarLicencia } from "./validators/licenciaValidator.js";
 import { validarEPS } from "./validators/epsValidator.js";
 import { validarARL } from "./validators/arlValidator.js";
 import { validarPension } from "./validators/pensionValidator.js";
-// import connection from "../database/snowflake.js";
-import { verificarPoppler } from "./utils/verificarPoppler.js";    
-
+import { validarPoder } from "./validators/poderValidator.js";
+import { validarCertificadoLicencia } from "./validators/certfLiceValidator.js";
+import { verificarPoppler } from "./utils/verificarPoppler.js";
+// import { consultarCedulaViaPython } from "";
 const app = express();
 const port = 5000;
 
@@ -39,23 +40,9 @@ const upload = multer({
   },
 });
 
-// function ejecutarQuery(connection, sqlText, binds) {
-//   return new Promise((resolve, reject) => {
-//     connection.execute({
-//       sqlText,
-//       binds,
-//       complete: (err, stmt, rows) => {
-//         if (err) {
-//           console.error("❌ Error en query:", err.message);
-//           reject(err);
-//         } else {
-//           console.log("✅ Query ejecutado, filas:", rows.length);
-//           resolve(rows);
-//         }
-//       },
-//     });
-//   });
-// }
+// ==========================================
+// ENDPOINT PRINCIPAL
+// ==========================================
 
 app.post(
   "/validar",
@@ -66,6 +53,8 @@ app.post(
     { name: "certificadoEPS", maxCount: 1 }, // EPS
     { name: "certificadoARL", maxCount: 1 }, // ARL
     { name: "certificadoPension", maxCount: 1 }, // PENSION
+    { name: "formatoPoder", maxCount: 1 }, // PODER
+    { name: "certificadoLicencia", maxCount: 1 }, // CERTIFICADO LICENCIA
   ]),
   async (req, res) => {
     console.log("📩 Recibí solicitud POST /validar");
@@ -78,38 +67,32 @@ app.post(
       cedula,
       nombreConductor,
     } = req.body;
-    let validacionBD = null;
 
-    // ================================
-    // 1. CONSULTA EN SNOWFLAKE
-    // ================================
+      // ================================
+      // 1. CONSULTA EN SNOWFLAKE
+      // ================================
 
-    try {
-      // const query = `
-      //    SELECT STCD1 AS CEDULA
-      //   FROM PRD_LND_MRP_SAP.MRP500.KNA1
-      //   WHERE STCD1 = ?
-      // `;
+      let validacionBD = null;
+      try {
+        console.log("🐍 Iniciando consulta via servicio Python...");
 
-      // const rows = await ejecutarQuery(connection, query, [cedula]);
+        validacionBD = await consultarCedulaViaPython(cedula);
+      } catch (err) {
+        console.error("❌ Error en consulta via Python:", err.message);
+        validacionBD = {
+          existe: false,
+          mensaje:
+            "⚠️ No se pudo consultar la cédula en SAP - Servicio no disponible",
+          error: err.message,
+        };
+      }
 
-      // if (rows.length > 0) {
-      //   res.json({
-      //     existe: true,
-      //     mensaje: `✅ La cédula ${cedula} existe en SAP`,
-      //     datos: rows[0],
-      //   });
-      // } else {
-      //   res.json({
-      //     existe: false,
-      //     mensaje: `⚠️ La cédula ${cedula} no existe en SAP`,
-      //   });
-      // }
-
+      console.log("🔗 Iniciando consulta mejorada en Snowflake...");
+      try {
       // Verificar que el archivo documento existe
       if (!req.files.documento || !req.files.documento[0]) {
         return res.status(400).json({
-          error: "No se recibió el archivo de documento de identidad",
+          error: "Archivo de documento (cédula) es requerido",
         });
       }
 
@@ -119,24 +102,23 @@ app.post(
       );
 
       // ================================
-      // 1. PROCESAR FORMATO
-      // ===============================
+      // 2. PROCESAR FORMATO
+      // ================================
 
-      const resultadoFormato = await validarFormatoTransportador(
-        req.files.formatoCreacion[0].buffer,
-        codigoTransportador,
-        nombreTransportador,
-        cedula,
-        nombreConductor
-      );
+      let resultadoFormato = null;
+      if (req.files.formatoCreacion && req.files.formatoCreacion[0]) {
+        resultadoFormato = await validarFormatoTransportador(
+          req.files.formatoCreacion[0].buffer,
+          codigoTransportador,
+          nombreTransportador,
+          cedula,
+          nombreConductor
+        );
+      }
 
       // ================================
-      // 2. PROCESAR CÉDULA
-      // ===============================
-
-      console.log(
-        `📄 Procesando ${archivoDocumento.mimetype}: ${archivoDocumento.originalname}`
-      );
+      // 3. PROCESAR CÉDULA
+      // ================================
 
       const resultadoCedula = await validarCedula(
         archivoDocumento.buffer,
@@ -145,31 +127,41 @@ app.post(
       );
 
       // Verificar calidad del procesamiento
-      if (resultadoCedula.debug?.error && resultadoCedula.debug.error.includes('poppler')) {
-        console.warn('⚠️ Error específico de poppler, sugiriendo alternativas...');
+      if (
+        resultadoCedula.debug?.error &&
+        resultadoCedula.debug.error.includes("poppler")
+      ) {
+        console.warn(
+          "⚠️ Error específico de poppler, sugiriendo alternativas..."
+        );
         return res.status(422).json({
           error: "Error procesando PDF",
-          detalle: "No se pudo convertir el PDF. Por favor, intenta con una imagen JPG o PNG del documento.",
-          sugerencia: "Convierte el PDF a imagen o usa un archivo de imagen directamente"
+          detalle:
+            "No se pudo convertir el PDF. Por favor, intenta con una imagen JPG o PNG del documento.",
+          sugerencia:
+            "Convierte el PDF a imagen o usa un archivo de imagen directamente",
         });
       }
 
       // ================================
-      // 3. PROCESAR LICENCIA DE CONDUCCIÓN
-      // ===============================
+      // 4. PROCESAR LICENCIA DE CONDUCCIÓN
+      // ================================
 
-      // const resultadoLicencia = await validarLicencia(
-      //   req.files.licenciaConduccion[0].buffer,
-      //   cedulaLimpia,
-      //   nombreEsperado
-      // );
+      let resultadoLicencia = null;
+      if (req.files.licenciaConduccion && req.files.licenciaConduccion[0]) {
+        resultadoLicencia = await validarLicencia(
+          req.files.licenciaConduccion[0].buffer,
+          nombreConductor,
+          cedula
+        );
+      }
 
       // ================================
-      // 4. PROCESAR CERTIFICADO EPS
+      // 5. PROCESAR CERTIFICADO EPS
       // ================================
 
       let resultadoEPS = null;
-      if (req.files.certificadoEPS) {
+      if (req.files.certificadoEPS && req.files.certificadoEPS[0]) {
         resultadoEPS = await validarEPS(
           req.files.certificadoEPS[0].buffer,
           nombreConductor,
@@ -178,11 +170,11 @@ app.post(
       }
 
       // ================================
-      // 5. PROCESAR CERTIFICADO ARL
+      // 6. PROCESAR CERTIFICADO ARL
       // ================================
 
       let resultadoARL = null;
-      if (req.files.certificadoARL) {
+      if (req.files.certificadoARL && req.files.certificadoARL[0]) {
         resultadoARL = await validarARL(
           req.files.certificadoARL[0].buffer,
           nombreConductor,
@@ -191,20 +183,49 @@ app.post(
       }
 
       // ================================
-      // 6. PROCESAR CERTIFICADO PENSION
+      // 7. PROCESAR CERTIFICADO PENSION
       // ================================
-      let resultadoPension = null;
 
-      if (req.files.certificadoPension) {
+      let resultadoPension = null;
+      if (req.files.certificadoPension && req.files.certificadoPension[0]) {
         resultadoPension = await validarPension(
           req.files.certificadoPension[0].buffer,
           nombreConductor,
           cedula
         );
       }
+
       // ================================
-      // RESPUESTA
+      // 8. PROCESAR FORMATO PODER
       // ================================
+
+      let resultadoPoder = null;
+      if (req.files.formatoPoder && req.files.formatoPoder[0]) {
+        resultadoPoder = await validarPoder(
+          req.files.formatoPoder[0].buffer,
+          nombreTransportador,
+          nombreConductor,
+          cedula
+        );
+      }
+
+      // ================================
+      // 9. PROCESAR CERTIFICADO LICENCIA
+      // ================================
+
+      let resultadoCertificadoLicencia = null;
+      if (req.files.certificadoLicencia && req.files.certificadoLicencia[0]) {
+        resultadoCertificadoLicencia = await validarCertificadoLicencia(
+          req.files.certificadoLicencia[0].buffer,
+          nombreConductor,
+          cedula
+        );
+      }
+
+      // ================================
+      // RESPUESTA FINAL
+      // ================================
+
       res.json({
         validacionBD,
         documentoFormato: resultadoFormato,
@@ -212,10 +233,12 @@ app.post(
           cedula: resultadoCedula.coincidencias.cedula,
           nombre: resultadoCedula.coincidencias.nombre,
         },
-        // documentoLicencia: resultadoLicencia,
+        documentoLicencia: resultadoLicencia,
         documentoEPS: resultadoEPS,
         documentoARL: resultadoARL,
         documentoPension: resultadoPension,
+        documentoPoder: resultadoPoder,
+        documentoCertificadoLicencia: resultadoCertificadoLicencia,
         textoCedula: resultadoCedula.textoCedula,
       });
     } catch (err) {
@@ -235,7 +258,10 @@ app.post(
   }
 );
 
-// Middleware para manejar errores de multer
+// ==========================================
+// MIDDLEWARE PARA ERRORES
+// ==========================================
+
 app.use((error, req, res, next) => {
   if (error instanceof multer.MulterError) {
     if (error.code === "LIMIT_FILE_SIZE") {
@@ -254,9 +280,18 @@ app.use((error, req, res, next) => {
   next(error);
 });
 
-app.listen(port, async () => {
-  console.log(`🧠 Servidor OCR activo en http://localhost:${port}`),
+// ==========================================
+// INICIAR SERVIDOR
+// ==========================================
 
-// Verificar dependencias al iniciar
+app.listen(port, async () => {
+  console.log(`🧠 Servidor OCR activo en http://localhost:${port}`);
+
+  // Verificar dependencias al iniciar
   await verificarPoppler();
+
+  console.log("🔐 Configuración SSL aplicada para Windows");
+  console.log(
+    "📡 Sistema listo para procesar documentos y consultar Snowflake"
+  );
 });
